@@ -1,0 +1,6 @@
+import {environment} from '../../../environments/environment'
+import {Injectable,signal} from '@angular/core';
+import {HttpClient} from '@angular/common/http';
+import {firstValueFrom} from 'rxjs';
+import {io,Socket} from 'socket.io-client';
+import {Game} from './models';@Injectable({providedIn:'root'})export class GameService{readonly api=environment.apiUrl ;private socket:Socket=io(this.api);game=signal<Game|null>(null);result=signal<any|null>(null);constructor(private http:HttpClient){this.socket.on('game-updated',(g:Game)=>this.game.set(g));this.socket.on('question-result',r=>this.result.set(r));this.socket.on('question-started',()=>this.result.set(null));}create(name:string){return firstValueFrom(this.http.post<Game>(`${this.api}/games`,{name}));}get(code:string){return firstValueFrom(this.http.get<Game>(`${this.api}/games/${code}`));}addTeam(code:string,name:string,members:string[]){return firstValueFrom(this.http.post(`${this.api}/games/${code}/teams`,{name,members}));}emit(event:string,data:any){return new Promise<any>(resolve=>this.socket.emit(event,data,resolve));}join(gameCode:string,teamId:string,nickname:string){return this.emit('join-game',{gameCode,teamId,nickname});}watch(gameCode:string){return this.emit('watch-game',{gameCode});}}

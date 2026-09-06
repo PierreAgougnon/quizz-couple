@@ -1,0 +1,29 @@
+import express from 'express';
+import cors from 'cors';
+import {createServer} from 'node:http';
+import {Server} from 'socket.io';
+import {games,id,publicGame,createGame,answerOptions} from './store.js';
+const app=express();app.use(cors({origin:'*'}));app.use(express.json());
+const httpServer=createServer(app);const io=new Server(httpServer,{cors:{origin:'*'}});
+const room=code=>`game:${code}`;const emitGame=game=>io.to(room(game.code)).emit('game-updated',publicGame(game));
+app.get('/health',(_req,res)=>res.json({status:'ok'}));
+app.post('/games',(req,res)=>res.status(201).json(publicGame(createGame(req.body.name))));
+app.get('/games/:code',(req,res)=>{const game=games.get(req.params.code.toUpperCase());game?res.json(publicGame(game)):res.status(404).json({message:'Partie introuvable'});});
+app.post('/games/:code/teams',(req,res)=>{const game=games.get(req.params.code.toUpperCase());if(!game)return res.status(404).json({message:'Partie introuvable'});const members=(req.body.members||[]).map(v=>String(v).trim()).filter(Boolean);if(!req.body.name?.trim()||members.length!==2||members[0].toLowerCase()===members[1].toLowerCase())return res.status(400).json({message:'Une équipe requiert un nom et deux prénoms différents'});const team={id:id(),name:req.body.name.trim(),members,score:0,matches:0,played:0,connected:[]};game.teams.push(team);emitGame(game);res.status(201).json(team);});
+io.on('connection',socket=>{
+ socket.on('watch-game',({gameCode},reply=()=>{})=>{const game=games.get(String(gameCode).toUpperCase());if(!game)return reply({ok:false});socket.join(room(game.code));reply({ok:true,game:publicGame(game)});});
+ socket.on('join-game',({gameCode,teamId,nickname},reply=()=>{})=>{const game=games.get(String(gameCode).toUpperCase());const team=game?.teams.find(t=>t.id===teamId);const member=team?.members.find(m=>m.toLowerCase()===String(nickname).toLowerCase());if(!game||!team||!member)return reply({ok:false,message:'Joueur ou équipe invalide'});socket.join(room(game.code));socket.data.player={gameCode:game.code,teamId,nickname:member};if(!team.connected.includes(member))team.connected.push(member);emitGame(game);reply({ok:true,game:publicGame(game)});});
+ socket.on('start-game',({gameCode},reply=()=>{})=>{const game=games.get(String(gameCode).toUpperCase());if(!game?.teams.length)return reply({ok:false,message:'Ajoute au moins une équipe'});game.status='RUNNING';game.questionNumber=0;game.teams.forEach(t=>Object.assign(t,{score:0,matches:0,played:0}));next(game,reply);});
+ socket.on('next-question',({gameCode},reply=()=>{})=>{const game=games.get(String(gameCode).toUpperCase());if(!game)return reply({ok:false,message:'Partie introuvable'});next(game,reply);});
+ socket.on('submit-answer',({answer},reply=()=>{})=>{const player=socket.data.player;const game=player&&games.get(player.gameCode);if(!game?.currentQuestion)return reply({ok:false,message:'Aucune question active'});if(game.currentQuestion.revealed)return reply({ok:false,message:'Les résultats sont déjà révélés'});const team=game.teams.find(t=>t.id===player.teamId);const allowed=answerOptions(game.currentQuestion,team,player.nickname).map(o=>o.value);if(!allowed.includes(answer))return reply({ok:false,message:'Réponse invalide'});const answers=game.currentQuestion.answers[player.teamId]??={};answers[player.nickname]=answer;const values=Object.values(answers);if(values.length===2&&!game.currentQuestion.scoredTeams.has(player.teamId)){game.currentQuestion.scoredTeams.add(player.teamId);team.played++;if(values[0]===values[1]){team.score++;team.matches++;}}emitGame(game);reply({ok:true});});
+ socket.on('reveal-results',({gameCode})=>{const game=games.get(String(gameCode).toUpperCase());if(!game?.currentQuestion)return;game.currentQuestion.revealed=true;io.to(room(game.code)).emit('question-result',{question:game.currentQuestion.text,results:game.teams.map(team=>{const answers=game.currentQuestion.answers[team.id]||{};const values=Object.values(answers);return{teamId:team.id,teamName:team.name,answers,match:values.length===2&&values[0]===values[1]};})});emitGame(game);});
+ socket.on('finish-game',({gameCode})=>{const game=games.get(String(gameCode).toUpperCase());if(game){game.status='FINISHED';game.currentQuestion=null;emitGame(game);}});
+ socket.on('disconnect',()=>{const p=socket.data.player;const game=p&&games.get(p.gameCode);const team=game?.teams.find(t=>t.id===p.teamId);if(team){team.connected=team.connected.filter(n=>n!==p.nickname);emitGame(game);}});
+});
+function next(game,reply){if(game.questionNumber>=game.questions.length){game.status='FINISHED';game.currentQuestion=null;emitGame(game);return reply({ok:true,finished:true});}const q=game.questions[game.questionNumber++];game.currentQuestion={...q,answers:{},scoredTeams:new Set(),revealed:false};game.status='RUNNING';io.to(room(game.code)).emit('question-started',publicGame(game).currentQuestion);emitGame(game);reply({ok:true});}
+//httpServer.listen(3000,'0.0.0.0',()=>console.log('API sur http://localhost:3000'));
+const port = process.env.PORT || 3000;
+
+httpServer.listen(port, '0.0.0.0', () => {
+  console.log(`API démarrée sur le port ${port}`);
+});

@@ -1,0 +1,5 @@
+{
+  "name":"quiz-couple-api","version":"2.0.0","private":true,"type":"module","engines": {"node": "24.x"},
+  "scripts":{"start":"node src/server.js","dev":"node --watch src/server.js"},
+  "dependencies":{"cors":"^2.8.5","express":"^5.1.0","socket.io":"^4.8.3"}
+}
