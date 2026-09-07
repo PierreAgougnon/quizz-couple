@@ -2,9 +2,8 @@
   "name":"quiz-couple-api","version":"2.0.0","private":true,"type":"module",
   
   "scripts": {
-    "build": "cd ../frontend && npm install && ng build --configuration production && rm -rf ../backend/public && cp -r dist/frontend/* ../backend/public",
+    "build": "cd ../frontend && npm install --include=dev && npx ng build --configuration production && rm -rf ../backend/public && cp -r dist/frontend/browser/* ../backend/public",
     "start": "node server.js"
-  }
-,
+  },
   "dependencies":{"cors":"^2.8.5","express":"^5.1.0","socket.io":"^4.8.3"}
 }
