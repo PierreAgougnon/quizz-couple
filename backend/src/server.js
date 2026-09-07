@@ -21,9 +21,4 @@ io.on('connection',socket=>{
  socket.on('disconnect',()=>{const p=socket.data.player;const game=p&&games.get(p.gameCode);const team=game?.teams.find(t=>t.id===p.teamId);if(team){team.connected=team.connected.filter(n=>n!==p.nickname);emitGame(game);}});
 });
 function next(game,reply){if(game.questionNumber>=game.questions.length){game.status='FINISHED';game.currentQuestion=null;emitGame(game);return reply({ok:true,finished:true});}const q=game.questions[game.questionNumber++];game.currentQuestion={...q,answers:{},scoredTeams:new Set(),revealed:false};game.status='RUNNING';io.to(room(game.code)).emit('question-started',publicGame(game).currentQuestion);emitGame(game);reply({ok:true});}
-//httpServer.listen(3000,'0.0.0.0',()=>console.log('API sur http://localhost:3000'));
-const port = process.env.PORT || 3000;
-
-httpServer.listen(port, '0.0.0.0', () => {
-  console.log(`API démarrée sur le port ${port}`);
-});
+httpServer.listen(3000,'0.0.0.0',()=>console.log('API sur http://localhost:3000'));
